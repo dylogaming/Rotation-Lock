@@ -10,6 +10,12 @@ pub struct Config {
     pub locked: bool,
     pub autostart: bool,
     pub start_locked: bool,
+    #[serde(default = "default_true")]
+    pub auto_update: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for Config {
@@ -19,6 +25,7 @@ impl Default for Config {
             locked: false,
             autostart: false,
             start_locked: false,
+            auto_update: true,
         }
     }
 }
