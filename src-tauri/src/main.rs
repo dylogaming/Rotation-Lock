@@ -9,7 +9,7 @@ mod updater;
 
 use state::AppState;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime};
 use tauri::{
     image::Image,
@@ -220,6 +220,32 @@ fn cmd_get_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
+#[derive(Clone, serde::Serialize)]
+struct WhatsNew {
+    version: String,
+    notes: String,
+}
+
+/// Returns this build's release notes if the user hasn't seen them yet
+/// (i.e. right after an update). Network call — invoked async from JS.
+#[tauri::command]
+fn cmd_whats_new(state: tauri::State<Arc<AppState>>) -> Option<WhatsNew> {
+    let current = env!("CARGO_PKG_VERSION").to_string();
+    if state.config.lock().unwrap().last_seen_version.as_deref() == Some(current.as_str()) {
+        return None;
+    }
+    match updater::notes_for_current() {
+        Ok(Some(notes)) => Some(WhatsNew { version: current, notes }),
+        _ => None,
+    }
+}
+
+#[tauri::command]
+fn cmd_ack_whats_new(state: tauri::State<Arc<AppState>>) -> Result<(), String> {
+    state.config.lock().unwrap().last_seen_version = Some(env!("CARGO_PKG_VERSION").to_string());
+    state.save().map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn cmd_is_elevated() -> bool { elevation::is_elevated() }
 
@@ -228,6 +254,41 @@ fn cmd_is_elevated() -> bool { elevation::is_elevated() }
 // hidden, so we track this ourselves on every hide/show path.
 static WINDOW_HIDDEN: AtomicBool = AtomicBool::new(false);
 
+/// Persist window geometry, but only while the window is actually visible —
+/// saving while hidden in the tray records garbage bounds (the old
+/// window-state-plugin bug that made the app open tiny).
+fn save_window_geometry(app: &AppHandle) {
+    if WINDOW_HIDDEN.load(Ordering::Relaxed) {
+        return;
+    }
+    let Some(win) = app.get_webview_window("main") else { return };
+    let (Ok(pos), Ok(size)) = (win.outer_position(), win.inner_size()) else { return };
+    if size.width == 0 || size.height == 0 {
+        return;
+    }
+    let state = app.state::<Arc<AppState>>();
+    state.config.lock().unwrap().window = Some(state::WindowRect {
+        x: pos.x,
+        y: pos.y,
+        w: size.width,
+        h: size.height,
+    });
+    let _ = state.save();
+}
+
+fn restore_window_geometry(app: &AppHandle) {
+    let state = app.state::<Arc<AppState>>();
+    let Some(rect) = state.config.lock().unwrap().window else { return };
+    let Some(win) = app.get_webview_window("main") else { return };
+    // Clamp to the configured minimum (tauri.conf.json minWidth/minHeight)
+    // so a corrupt save can't shrink the app.
+    let sf = win.scale_factor().unwrap_or(1.0);
+    let w = rect.w.max((340.0 * sf) as u32);
+    let h = rect.h.max((390.0 * sf) as u32);
+    let _ = win.set_size(tauri::PhysicalSize::new(w, h));
+    let _ = win.set_position(tauri::PhysicalPosition::new(rect.x, rect.y));
+}
+
 #[tauri::command]
 fn cmd_is_window_visible() -> bool {
     !WINDOW_HIDDEN.load(Ordering::Relaxed)
@@ -235,7 +296,16 @@ fn cmd_is_window_visible() -> bool {
 
 #[tauri::command]
 fn cmd_hide_window(window: tauri::Window) -> Result<(), String> {
-    window.hide().map_err(|e| e.to_string())?;
+    save_window_geometry(window.app_handle());
+    // Raw hide to mirror the raw no-activate show: tauri's hide() no-ops when
+    // its internal visibility state is stale (we bypass show()).
+    if let Ok(hwnd) = window.hwnd() {
+        unsafe {
+            use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE};
+            let _ = ShowWindow(windows::Win32::Foundation::HWND(hwnd.0 as _), SW_HIDE);
+        }
+    }
+    let _ = window.hide();
     WINDOW_HIDDEN.store(true, Ordering::Relaxed);
     if let Some(wv) = window.app_handle().get_webview_window("main") {
         let _ = wv.eval("if(window.__rotationLockSetHidden) window.__rotationLockSetHidden(true);");
@@ -292,15 +362,27 @@ fn toggle_from_tray(app: &AppHandle) {
 
 fn show_main_window(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
-        let _ = win.show();
+        // Show WITHOUT activating: tauri's show() maps to ShowWindow(SW_SHOW),
+        // which steals keyboard focus. SW_SHOWNOACTIVATE does not.
+        let shown_quietly = match win.hwnd() {
+            Ok(hwnd) => unsafe {
+                use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_SHOWNOACTIVATE};
+                let _ = ShowWindow(windows::Win32::Foundation::HWND(hwnd.0 as _), SW_SHOWNOACTIVATE);
+                true
+            },
+            Err(_) => false,
+        };
+        if !shown_quietly {
+            let _ = win.show();
+        }
         let _ = win.unminimize();
-        let _ = win.set_focus();
         WINDOW_HIDDEN.store(false, Ordering::Relaxed);
         let _ = win.eval("if(window.__rotationLockSetHidden) window.__rotationLockSetHidden(false);");
     }
 }
 
 fn quit_app(app: &AppHandle) {
+    save_window_geometry(app);
     let state = app.state::<Arc<AppState>>();
     if state.config.lock().unwrap().locked {
         let _ = cmd_unlock(app.clone(), state);
@@ -339,6 +421,8 @@ fn main() {
             cmd_set_start_locked,
             cmd_set_auto_update,
             cmd_get_version,
+            cmd_whats_new,
+            cmd_ack_whats_new,
             cmd_is_elevated,
             cmd_open_url,
             cmd_hide_window,
@@ -346,14 +430,32 @@ fn main() {
             cmd_is_window_visible,
         ])
         .on_window_event(|window, event| {
+            // Persist geometry as the user moves/resizes (throttled) so the
+            // last layout survives even a force-killed process.
+            if matches!(event, WindowEvent::Moved(_) | WindowEvent::Resized(_)) {
+                static LAST_SAVE: Mutex<Option<std::time::Instant>> = Mutex::new(None);
+                let mut last = LAST_SAVE.lock().unwrap();
+                let now = std::time::Instant::now();
+                if last.map_or(true, |t| now.duration_since(t).as_millis() >= 500) {
+                    *last = Some(now);
+                    save_window_geometry(window.app_handle());
+                }
+            }
             if let WindowEvent::CloseRequested { api, .. } = event {
+                // X = minimize to tray (standard tray-app behavior). Quit lives
+                // in the gear menu and tray menu.
                 api.prevent_close();
+                save_window_geometry(window.app_handle());
+                if let Ok(hwnd) = window.hwnd() {
+                    unsafe {
+                        use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE};
+                        let _ = ShowWindow(windows::Win32::Foundation::HWND(hwnd.0 as _), SW_HIDE);
+                    }
+                }
+                let _ = window.hide();
+                WINDOW_HIDDEN.store(true, Ordering::Relaxed);
                 if let Some(wv) = window.app_handle().get_webview_window("main") {
-                    let _ = wv.eval(
-                        "var o=document.getElementById('closeOverlay'); \
-                         if(o){o.dataset.open='true';\
-                         var b=document.getElementById('closeMinimizeBtn'); if(b) b.focus();}"
-                    );
+                    let _ = wv.eval("if(window.__rotationLockSetHidden) window.__rotationLockSetHidden(true);");
                 }
             }
         })
@@ -395,6 +497,8 @@ fn main() {
                 reapply_lock_if_configured(&handle, &app_state, "startup");
             }
 
+            restore_window_geometry(&handle);
+
             // Window is created hidden (visible: false). Only show it for a deliberate
             // launch; --tray (autostart/unlock re-trigger) stays in the tray.
             if started_from_tray {
@@ -425,9 +529,6 @@ fn main() {
                 let app_state = app_state.clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(Duration::from_secs(8));
-                    if !app_state.config.lock().unwrap().auto_update {
-                        return;
-                    }
                     let update = match updater::check() {
                         Ok(Some(u)) => u,
                         Ok(None) => return,
@@ -436,6 +537,14 @@ fn main() {
                             return;
                         }
                     };
+                    if !app_state.config.lock().unwrap().auto_update {
+                        // Auto-update off: just light the bell with the notes.
+                        let _ = handle.emit("update-available", WhatsNew {
+                            version: update.version.clone(),
+                            notes: update.notes.clone(),
+                        });
+                        return;
+                    }
                     let _ = handle.emit("update-status", format!("Updating to {}…", update.version));
                     match updater::download_and_stage(&update, started_from_tray) {
                         Ok(()) => {
