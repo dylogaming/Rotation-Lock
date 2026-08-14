@@ -12,6 +12,20 @@ pub struct Config {
     pub start_locked: bool,
     #[serde(default = "default_true")]
     pub auto_update: bool,
+    /// Last version whose release notes the user has seen (bell cleared).
+    #[serde(default)]
+    pub last_seen_version: Option<String>,
+    /// Saved window geometry (physical px), captured only while visible.
+    #[serde(default)]
+    pub window: Option<WindowRect>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub struct WindowRect {
+    pub x: i32,
+    pub y: i32,
+    pub w: u32,
+    pub h: u32,
 }
 
 fn default_true() -> bool {
@@ -26,6 +40,8 @@ impl Default for Config {
             autostart: false,
             start_locked: false,
             auto_update: true,
+            last_seen_version: None,
+            window: None,
         }
     }
 }

@@ -5,7 +5,6 @@ const { listen } = window.__TAURI__.event;
 const $ = (id) => document.getElementById(id);
 const els = {
   toggleStatus: $("toggleStatus"),
-  toggleAction: $("toggleAction"),
   toggleBtn:    $("toggleBtn"),
   sensorSelect:$("sensorSelect"),
   sensorPicker:$("sensorPicker"),
@@ -13,8 +12,7 @@ const els = {
   sensorTriggerText:$("sensorTriggerText"),
   sensorMenu:  $("sensorMenu"),
   refreshBtn:  $("refreshBtn"),
-  autostart:   $("autostartChk"),
-  startLocked: $("startLockedChk"),
+  autostart:   $("menuRunLoginBtn"),
   msg:         $("msg"),
   msgText:     $("msg")?.querySelector(".msg-text"),
   fillPath:    $("fillPath"),
@@ -28,8 +26,6 @@ const els = {
 
 let cfg = null;
 let sensors = [];
-const FAVORITES_KEY = "rotation-lock.favorite-sensors";
-let favoriteSensors = new Set(JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]"));
 
 // Pause all rAF loops + CSS animations when the window is hidden (minimized to tray).
 // Without this the WebView2 GPU process keeps the compositor running at ~100% of one core.
@@ -43,18 +39,19 @@ let uiState = STATE.UNLOCKED;
 function setUiState(s) {
   uiState = s;
   document.body.dataset.state = s;
+  // Description lives in the button tooltip (hover), not visible text.
   if (s === STATE.LOCKED) {
     els.toggleStatus.textContent = "Locked";
-    els.toggleAction.textContent = "Tap to unlock rotation";
+    els.toggleBtn.title = "Tap to unlock rotation";
   } else if (s === STATE.UNLOCKED) {
     els.toggleStatus.textContent = "Unlocked";
-    els.toggleAction.textContent = "Tap to lock rotation";
+    els.toggleBtn.title = "Tap to lock rotation";
   } else if (s === STATE.LOCKING) {
     els.toggleStatus.textContent = "Locking…";
-    els.toggleAction.textContent = "Engaging laptop mode";
+    els.toggleBtn.title = "Engaging laptop mode";
   } else if (s === STATE.UNLOCKING) {
     els.toggleStatus.textContent = "Unlocking…";
-    els.toggleAction.textContent = "Releasing rotation";
+    els.toggleBtn.title = "Releasing rotation";
   }
   const day = (s === STATE.LOCKED || s === STATE.LOCKING);
   if (typeof sky !== "undefined") sky.setMode(day ? "day" : "night");
@@ -222,7 +219,7 @@ class TwinkleLayer {
       p.life += dt;
       p.y += p.vy * dt;
       p.x += Math.sin(p.life * p.freq * Math.PI + p.phase) * p.amp * dt;
-      if (p.life >= p.ttl || p.y < -10) return false;
+      if (p.life >= p.ttl || p.y < 30) return false;
       const fade =
         p.life < 0.6 ? (p.life / 0.6) :
         p.life > p.ttl - 0.9 ? ((p.ttl - p.life) / 0.9) : 1;
@@ -239,7 +236,9 @@ class TwinkleLayer {
       }
       const size = p.size * pulse;
       const lum = p.lum + 8 * Math.sin(p.life * 3 + p.phase);
-      const alpha = Math.max(0, Math.min(1, fade));
+      // Fade rising twinkles out before they reach the button strip up top
+      const topFade = Math.max(0, Math.min(1, (p.y - 44) / 52));
+      const alpha = Math.max(0, Math.min(1, fade)) * topFade;
       const col = `hsla(${p.hue}, ${p.sat}%, ${lum}%, ${alpha})`;
       const colSoft = `hsla(${p.hue}, ${p.sat}%, ${lum}%, ${alpha * 0.55})`;
       const rot = p.rotInit + p.life * p.rotSpeed;
@@ -331,7 +330,8 @@ class SkyScene {
     const n = 55;
     for (let i = 0; i < n; i++) {
       this.stars.push({
-        x: Math.random(), y: Math.random() * 0.78,
+        // Keep the strip under the top buttons (~top 12%) star-free
+        x: Math.random(), y: 0.12 + Math.random() * 0.66,
         baseSize: 0.4 + Math.random() * 1.6,
         phase: Math.random() * Math.PI * 2,
         freq: 0.4 + Math.random() * 0.9,
@@ -501,15 +501,63 @@ function stopCornerShine() {
 }
 
 // ---- Lock / unlock with backend-synced fill ----
+// Cursor reflection on the lock metal: light spot follows the mouse, with a
+// slight vertical stretch and blur so it reads as a distorted specular glint.
+(() => {
+  const stage = document.getElementById("lockStage");
+  const svg = document.querySelector(".lock-svg");
+  const shine = document.getElementById("mouseShine");
+  if (!stage || !svg || !shine) return;
+  let raf = 0;
+  stage.addEventListener("mousemove", (e) => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      const r = svg.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      const x = ((e.clientX - r.left) / r.width) * 120;
+      const y = ((e.clientY - r.top) / r.height) * 160;
+      shine.setAttribute("cx", x.toFixed(1));
+      shine.setAttribute("cy", y.toFixed(1));
+      // Stretch the glint a touch more the closer it is to the curved clasp
+      shine.setAttribute("ry", (y < 80 ? 30 : 24).toFixed(0));
+      shine.setAttribute("opacity", "0.5");
+    });
+  });
+  stage.addEventListener("mouseleave", () => {
+    shine.setAttribute("opacity", "0");
+  });
+})();
+
+function jiggleClasp(cls) {
+  const shackle = document.getElementById("shackle");
+  if (!shackle) return;
+  shackle.classList.remove("jiggle-open", "jiggle-closed");
+  void shackle.getBoundingClientRect(); // restart animation on rapid re-clicks
+  shackle.classList.add(cls);
+  shackle.addEventListener("animationend", () => shackle.classList.remove(cls), { once: true });
+}
+
 async function onToggle() {
-  if (uiState === STATE.LOCKING || uiState === STATE.UNLOCKING) return;
+  if (uiState === STATE.LOCKING) {
+    // Extra taps while engaging replay the sparks and rattle the clasp.
+    starBurst(14);
+    jiggleClasp("jiggle-closed");
+    return;
+  }
+  if (uiState === STATE.UNLOCKING) {
+    // Taps while releasing just rattle the open clasp.
+    jiggleClasp("jiggle-open");
+    return;
+  }
   const wasLocked = uiState === STATE.LOCKED;
-  els.toggleBtn.disabled = true;
+  // Busy flag instead of disabled: disabled buttons swallow clicks, which
+  // would kill the mid-transition jiggle/spark taps.
+  els.toggleBtn.dataset.busy = "true";
 
   try {
     if (!wasLocked) {
       setUiState(STATE.LOCKING);
-      showMsg("Locking...", "busy");
       const backend = invoke("cmd_lock").then(v => ({ ok: true, v }), e => ({ ok: false, e }));
       // Mirror the unlock timings so the fill is the literal reverse of the drain.
       await new Promise(r => setTimeout(r, 280));
@@ -522,10 +570,8 @@ async function onToggle() {
       await animateFill(0.92, 1, 220);
       setUiState(STATE.LOCKED);
       startCornerShine();
-      showMsg("Locked.", "success");
     } else {
       setUiState(STATE.UNLOCKING);
-      showMsg("Unlocking...", "busy");
       const backend = invoke("cmd_unlock").then(v => ({ ok: true, v }), e => ({ ok: false, e }));
       // Rumble 0..280ms
       await new Promise(r => setTimeout(r, 280));
@@ -540,7 +586,6 @@ async function onToggle() {
       stopCornerShine();
       setUiState(STATE.UNLOCKED);
       setFillProgress(0);
-      showMsg("Unlocked.", "success");
     }
   } catch (e) {
     setFillProgress(wasLocked ? 1 : 0);
@@ -548,7 +593,7 @@ async function onToggle() {
     if (wasLocked) startCornerShine(); else stopCornerShine();
     showMsg(String(e), "error");
   } finally {
-    els.toggleBtn.disabled = false;
+    delete els.toggleBtn.dataset.busy;
   }
 }
 
@@ -574,11 +619,7 @@ async function loadSensors() {
 }
 
 function sortSensors() {
-  sensors.sort((a, b) => {
-    const af = favoriteSensors.has(a.instance_id) ? 1 : 0;
-    const bf = favoriteSensors.has(b.instance_id) ? 1 : 0;
-    return bf - af || (b.priority || 0) - (a.priority || 0);
-  });
+  sensors.sort((a, b) => (b.priority || 0) - (a.priority || 0));
 }
 
 function sensorLabel(s) {
@@ -589,36 +630,12 @@ function selectedSensor() {
   return sensors.find(s => s.instance_id === els.sensorSelect.value);
 }
 
-function saveFavorites() {
-  localStorage.setItem(FAVORITES_KEY, JSON.stringify([...favoriteSensors]));
-}
-
 function renderSensorPicker() {
   sortSensors();
   const current = selectedSensor();
   els.sensorTriggerText.textContent = sensorLabel(current);
   els.sensorMenu.innerHTML = "";
   for (const s of sensors) {
-    const row = document.createElement("div");
-    row.className = "sensor-row";
-    const star = document.createElement("button");
-    star.type = "button";
-    star.className = "sensor-list-star";
-    star.title = favoriteSensors.has(s.instance_id) ? "Remove favorite" : "Favorite this sensor";
-    star.textContent = favoriteSensors.has(s.instance_id) ? "★" : "☆";
-    star.dataset.active = favoriteSensors.has(s.instance_id) ? "true" : "false";
-    star.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const isFav = !favoriteSensors.has(s.instance_id);
-      if (isFav) favoriteSensors.add(s.instance_id);
-      else favoriteSensors.delete(s.instance_id);
-      saveFavorites();
-      star.textContent = isFav ? "★" : "☆";
-      star.dataset.active = isFav ? "true" : "false";
-      star.title = isFav ? "Remove favorite" : "Favorite this sensor";
-      showMsg(isFav ? "Sensor favorited." : "Favorite removed.", "success");
-    });
-
     const item = document.createElement("button");
     item.type = "button";
     item.className = "sensor-option";
@@ -632,9 +649,7 @@ function renderSensorPicker() {
       await setSensor(s.instance_id);
       closeSensorMenu();
     });
-    row.appendChild(star);
-    row.appendChild(item);
-    els.sensorMenu.appendChild(row);
+    els.sensorMenu.appendChild(item);
   }
 }
 
@@ -647,6 +662,10 @@ async function setSensor(instanceId) {
 }
 
 function openSensorMenu() {
+  // Prefer opening downward; flip up only if the menu wouldn't fit below.
+  const spaceBelow = window.innerHeight - els.sensorTrigger.getBoundingClientRect().bottom;
+  const needed = Math.min(148, els.sensorMenu.scrollHeight || 148) + 10;
+  els.sensorMenu.dataset.dir = spaceBelow < needed ? "up" : "down";
   els.sensorPicker.dataset.open = "true";
   els.sensorTrigger.setAttribute("aria-expanded", "true");
 }
@@ -661,7 +680,10 @@ function closeSensorMenu() {
 async function init() {
   cfg = await invoke("cmd_get_config");
   invoke("cmd_get_version")
-    .then((v) => { document.getElementById("appVersion").textContent = `v${v}`; })
+    .then((v) => {
+      document.getElementById("appVersion").textContent = `v${v}`;
+      document.getElementById("aboutVersion").textContent = `Version ${v}`;
+    })
     .catch(() => {});
   const elevated = await invoke("cmd_is_elevated");
   if (!elevated) showMsg("App is not elevated: lock won't work without admin rights.", "error");
@@ -677,8 +699,7 @@ async function init() {
   }
   twinkles.start();
 
-  els.autostart.checked = await invoke("cmd_autostart_installed");
-  els.startLocked.checked = !!cfg.start_locked;
+  els.autostart.setAttribute("aria-checked", (await invoke("cmd_autostart_installed")) ? "true" : "false");
 
   await loadSensors();
 
@@ -701,16 +722,12 @@ async function init() {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closeSensorMenu();
   });
-  els.autostart.addEventListener("change", onAutostart);
-  els.startLocked.addEventListener("change", onStartLocked);
+  els.autostart.addEventListener("click", onAutostart);
 
-  const donateBtn = $("donateBtn");
-  if (donateBtn) {
-    donateBtn.addEventListener("click", async () => {
-      try { await invoke("cmd_open_url", { url: "https://ko-fi.com/dylogaming" }); }
-      catch (err) { showMsg(String(err), "error"); }
-    });
-  }
+  document.getElementById("menuDonateBtn").addEventListener("click", async () => {
+    try { await invoke("cmd_open_url", { url: "https://ko-fi.com/dylogaming" }); }
+    catch (err) { showMsg(String(err), "error"); }
+  });
 
   listen("state-changed", (ev) => {
     if (ev.payload.locked && uiState !== STATE.LOCKED && uiState !== STATE.LOCKING) {
@@ -720,8 +737,8 @@ async function init() {
     }
   }).catch((err) => console.warn("state listener unavailable", err));
 
-  // In-app File/Help menus (replaces the native menu bar)
-  const menus = Array.from(document.querySelectorAll(".menubar .menu"));
+  // Top-right overlay menus (bell + gear)
+  const menus = Array.from(document.querySelectorAll(".topbar .menu"));
   const closeMenus = () => menus.forEach((m) => {
     m.classList.remove("open");
     m.querySelector(".menu-btn").setAttribute("aria-expanded", "false");
@@ -757,7 +774,6 @@ async function init() {
     try { await invoke("cmd_quit_app"); }
     catch (err) { showMsg(String(err), "error"); }
   };
-  document.getElementById("menuHideBtn").addEventListener("click", menuHide);
   const autoUpdateBtn = document.getElementById("menuAutoUpdateBtn");
   autoUpdateBtn.setAttribute("aria-checked", cfg?.auto_update !== false ? "true" : "false");
   autoUpdateBtn.addEventListener("click", async (e) => {
@@ -771,6 +787,38 @@ async function init() {
   });
   listen("update-status", (ev) => showMsg(ev.payload))
     .catch((err) => console.warn("update listener unavailable", err));
+
+  // Update-news bell
+  const bellBtn = document.getElementById("bellBtn");
+  const setBellNews = (title, notes, alert) => {
+    document.getElementById("bellTitle").textContent = title;
+    const list = document.getElementById("bellNotes");
+    list.innerHTML = "";
+    const bullets = (notes || "").split("\n")
+      .map((l) => l.trim())
+      .filter((l) => /^[-*•]/.test(l))
+      .map((l) => l.replace(/^[-*•]\s*/, ""));
+    for (const b of (bullets.length ? bullets : (notes || "").split("\n").filter(Boolean))) {
+      const li = document.createElement("li");
+      // Hard cap: 8 words per bullet, no walls of text
+      const words = b.split(/\s+/);
+      li.textContent = words.length > 8 ? words.slice(0, 8).join(" ") + "…" : b;
+      list.appendChild(li);
+    }
+    bellBtn.dataset.alert = alert ? "true" : "false";
+  };
+  invoke("cmd_whats_new")
+    .then((news) => { if (news) setBellNews(`What's new in v${news.version.replace(/^v/, "")}`, news.notes, true); })
+    .catch(() => {});
+  listen("update-available", (ev) => {
+    setBellNews(`Update ${ev.payload.version} available`, ev.payload.notes, true);
+  }).catch(() => {});
+  bellBtn.addEventListener("click", () => {
+    if (bellBtn.dataset.alert === "true") {
+      bellBtn.dataset.alert = "false";
+      invoke("cmd_ack_whats_new").catch(() => {});
+    }
+  });
   document.getElementById("menuQuitBtn").addEventListener("click", menuQuit);
   document.getElementById("menuAboutBtn").addEventListener("click", () => {
     closeMenus();
@@ -799,40 +847,18 @@ async function init() {
   listen("show-about", () => { overlay.dataset.open = "true"; })
     .catch((err) => console.warn("about listener unavailable", err));
 
-  const closeOverlay = $("closeOverlay");
-  const hideClosePrompt = () => { closeOverlay.dataset.open = "false"; };
-  $("closeMinimizeBtn").addEventListener("click", async () => {
-    hideClosePrompt();
-    try { await invoke("cmd_hide_window"); }
-    catch (err) { showMsg(String(err), "error"); }
-  });
-  $("closeQuitBtn").addEventListener("click", async () => {
-    try { await invoke("cmd_quit_app"); }
-    catch (err) { showMsg(String(err), "error"); }
-  });
-  $("closeCancelBtn").addEventListener("click", hideClosePrompt);
-  closeOverlay.addEventListener("click", (e) => {
-    if (e.target === closeOverlay) hideClosePrompt();
-  });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && closeOverlay.dataset.open === "true") hideClosePrompt();
-  });
-  listen("close-requested", () => {
-    closeOverlay.dataset.open = "true";
-    requestAnimationFrame(() => $("closeMinimizeBtn").focus());
-  }).catch((err) => console.warn("close listener unavailable", err));
 }
 
 async function onAutostart(e) {
+  e.stopPropagation(); // keep the gear menu open so the checkmark change is visible
+  const btn = e.currentTarget;
+  const next = btn.getAttribute("aria-checked") !== "true";
   try {
-    if (e.target.checked) { await invoke("cmd_install_autostart"); showMsg("Autostart enabled."); }
-    else                  { await invoke("cmd_uninstall_autostart"); showMsg("Autostart removed."); }
-  } catch (err) { e.target.checked = !e.target.checked; showMsg(String(err), "error"); }
+    if (next) { await invoke("cmd_install_autostart"); showMsg("Autostart enabled."); }
+    else      { await invoke("cmd_uninstall_autostart"); showMsg("Autostart removed."); }
+    btn.setAttribute("aria-checked", next ? "true" : "false");
+  } catch (err) { showMsg(String(err), "error"); }
 }
 
-async function onStartLocked(e) {
-  try { await invoke("cmd_set_start_locked", { value: e.target.checked }); showMsg("Saved."); }
-  catch (err) { e.target.checked = !e.target.checked; showMsg(String(err), "error"); }
-}
 
 init().catch(err => showMsg(String(err), "error"));

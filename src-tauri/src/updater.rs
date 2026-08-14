@@ -12,6 +12,7 @@ const USER_AGENT: &str = concat!("rotation-lock/", env!("CARGO_PKG_VERSION"));
 
 pub struct Update {
     pub version: String,
+    pub notes: String,
     download_url: String,
 }
 
@@ -49,12 +50,32 @@ pub fn check() -> Result<Option<Update>> {
         .find(|a| a["name"].as_str().is_some_and(|n| n.ends_with(".exe")))
         .ok_or_else(|| anyhow!("release {tag} has no .exe asset"))?;
     Ok(Some(Update {
+        notes: resp["body"].as_str().unwrap_or_default().to_string(),
         version: tag,
         download_url: asset["browser_download_url"]
             .as_str()
             .ok_or_else(|| anyhow!("asset missing download url"))?
             .to_string(),
     }))
+}
+
+/// Release notes for this build's own version tag (for the post-update
+/// "what's new" bell). Returns None if the release doesn't exist.
+pub fn notes_for_current() -> Result<Option<String>> {
+    let tag = format!("v{}", env!("CARGO_PKG_VERSION"));
+    let url = format!("https://api.github.com/repos/{REPO}/releases/tags/{tag}");
+    let resp = ureq::get(&url)
+        .set("User-Agent", USER_AGENT)
+        .set("Accept", "application/vnd.github+json")
+        .timeout(std::time::Duration::from_secs(15))
+        .call();
+    let resp = match resp {
+        Ok(r) => r,
+        Err(ureq::Error::Status(404, _)) => return Ok(None),
+        Err(e) => return Err(e).context("querying release by tag"),
+    };
+    let json: serde_json::Value = resp.into_json().context("parsing release JSON")?;
+    Ok(Some(json["body"].as_str().unwrap_or_default().to_string()))
 }
 
 /// Downloads the new exe and spawns the swap script. On success the caller
