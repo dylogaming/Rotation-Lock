@@ -627,6 +627,7 @@ function renderSensorPicker() {
     item.dataset.selected = s.instance_id === els.sensorSelect.value ? "true" : "false";
     item.innerHTML = `<span class="sensor-option-text"></span>`;
     item.querySelector(".sensor-option-text").textContent = sensorLabel(s);
+    item.title = sensorLabel(s);
     item.addEventListener("click", async () => {
       await setSensor(s.instance_id);
       closeSensorMenu();
@@ -659,6 +660,9 @@ function closeSensorMenu() {
 
 async function init() {
   cfg = await invoke("cmd_get_config");
+  invoke("cmd_get_version")
+    .then((v) => { document.getElementById("appVersion").textContent = `v${v}`; })
+    .catch(() => {});
   const elevated = await invoke("cmd_is_elevated");
   if (!elevated) showMsg("App is not elevated: lock won't work without admin rights.", "error");
 
@@ -680,7 +684,14 @@ async function init() {
 
   els.toggleBtn.addEventListener("click", onToggle);
   els.lockStage.addEventListener("click", onToggle);
-  els.refreshBtn.addEventListener("click", loadSensors);
+  els.refreshBtn.addEventListener("click", () => {
+    const btn = els.refreshBtn;
+    btn.classList.remove("spinning");
+    void btn.offsetWidth; // restart animation on rapid re-clicks
+    btn.classList.add("spinning");
+    btn.addEventListener("animationend", () => btn.classList.remove("spinning"), { once: true });
+    loadSensors();
+  });
   els.sensorTrigger.addEventListener("click", () => {
     els.sensorPicker.dataset.open === "true" ? closeSensorMenu() : openSensorMenu();
   });
@@ -708,6 +719,69 @@ async function init() {
       setUiState(STATE.UNLOCKED); setFillProgress(0); stopCornerShine();
     }
   }).catch((err) => console.warn("state listener unavailable", err));
+
+  // In-app File/Help menus (replaces the native menu bar)
+  const menus = Array.from(document.querySelectorAll(".menubar .menu"));
+  const closeMenus = () => menus.forEach((m) => {
+    m.classList.remove("open");
+    m.querySelector(".menu-btn").setAttribute("aria-expanded", "false");
+  });
+  menus.forEach((m) => {
+    const btn = m.querySelector(".menu-btn");
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const wasOpen = m.classList.contains("open");
+      closeMenus();
+      if (!wasOpen) { m.classList.add("open"); btn.setAttribute("aria-expanded", "true"); }
+    });
+    // Hover-switch between menus while one is open (native menubar behavior)
+    btn.addEventListener("mouseenter", () => {
+      if (menus.some((o) => o !== m && o.classList.contains("open"))) {
+        closeMenus();
+        m.classList.add("open");
+        btn.setAttribute("aria-expanded", "true");
+      }
+    });
+  });
+  document.addEventListener("click", closeMenus);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeMenus();
+  });
+  const menuHide = async () => {
+    closeMenus();
+    try { await invoke("cmd_hide_window"); }
+    catch (err) { showMsg(String(err), "error"); }
+  };
+  const menuQuit = async () => {
+    closeMenus();
+    try { await invoke("cmd_quit_app"); }
+    catch (err) { showMsg(String(err), "error"); }
+  };
+  document.getElementById("menuHideBtn").addEventListener("click", menuHide);
+  const autoUpdateBtn = document.getElementById("menuAutoUpdateBtn");
+  autoUpdateBtn.setAttribute("aria-checked", cfg?.auto_update !== false ? "true" : "false");
+  autoUpdateBtn.addEventListener("click", async (e) => {
+    e.stopPropagation(); // keep the menu open so the checkmark change is visible
+    const next = autoUpdateBtn.getAttribute("aria-checked") !== "true";
+    try {
+      await invoke("cmd_set_auto_update", { value: next });
+      autoUpdateBtn.setAttribute("aria-checked", next ? "true" : "false");
+      showMsg(next ? "Auto-update enabled." : "Auto-update disabled.");
+    } catch (err) { showMsg(String(err), "error"); }
+  });
+  listen("update-status", (ev) => showMsg(ev.payload))
+    .catch((err) => console.warn("update listener unavailable", err));
+  document.getElementById("menuQuitBtn").addEventListener("click", menuQuit);
+  document.getElementById("menuAboutBtn").addEventListener("click", () => {
+    closeMenus();
+    document.getElementById("aboutOverlay").dataset.open = "true";
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey && !e.shiftKey && !e.altKey) {
+      if (e.key === "w" || e.key === "W") { e.preventDefault(); menuHide(); }
+      else if (e.key === "q" || e.key === "Q") { e.preventDefault(); menuQuit(); }
+    }
+  });
 
   const overlay = document.getElementById("aboutOverlay");
   const closeAbout = () => {

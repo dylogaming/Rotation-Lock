@@ -5,6 +5,7 @@ mod elevation;
 mod sensor;
 mod state;
 mod tasksched;
+mod updater;
 
 use state::AppState;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -12,7 +13,7 @@ use std::sync::{Arc, OnceLock};
 use std::time::{Duration, SystemTime};
 use tauri::{
     image::Image,
-    menu::{Menu, MenuItem, PredefinedMenuItem, Submenu},
+    menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager, WindowEvent,
 };
@@ -209,6 +210,17 @@ fn cmd_set_start_locked(state: tauri::State<Arc<AppState>>, value: bool) -> Resu
 }
 
 #[tauri::command]
+fn cmd_set_auto_update(state: tauri::State<Arc<AppState>>, value: bool) -> Result<(), String> {
+    state.config.lock().unwrap().auto_update = value;
+    state.save().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn cmd_get_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
+#[tauri::command]
 fn cmd_is_elevated() -> bool { elevation::is_elevated() }
 
 // Authoritative visibility flag for the JS-side rAF/CSS gating. Tauri's
@@ -308,10 +320,12 @@ fn main() {
     let app_state = Arc::new(AppState::load().expect("load config"));
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            show_main_window(app);
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // Autostart re-triggers (unlock/resume) pass --tray; stay in the tray for those.
+            if !args.iter().any(|a| a == "--tray") {
+                show_main_window(app);
+            }
         }))
-        .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(app_state.clone())
         .invoke_handler(tauri::generate_handler![
             cmd_list_sensors,
@@ -323,6 +337,8 @@ fn main() {
             cmd_uninstall_autostart,
             cmd_autostart_installed,
             cmd_set_start_locked,
+            cmd_set_auto_update,
+            cmd_get_version,
             cmd_is_elevated,
             cmd_open_url,
             cmd_hide_window,
@@ -368,35 +384,7 @@ fn main() {
                 })
                 .build(app)?;
 
-            // Window menu bar: File / Edit / Help (Donate is rendered as an in-app button)
-            let file_menu = Submenu::with_items(&handle, "&File", true, &[
-                &MenuItem::with_id(&handle, "menu-hide", "Minimize to tray", true, Some("CmdOrCtrl+W"))?,
-                &PredefinedMenuItem::separator(&handle)?,
-                &MenuItem::with_id(&handle, "menu-quit", "Quit", true, Some("CmdOrCtrl+Q"))?,
-            ])?;
-            let help_menu = Submenu::with_items(&handle, "&Help", true, &[
-                &MenuItem::with_id(&handle, "menu-about", "About Rotation Lock", true, None::<&str>)?,
-            ])?;
-            let app_menu = Menu::with_items(&handle, &[&file_menu, &help_menu])?;
-            if let Some(win) = app.get_webview_window("main") {
-                let _ = win.set_menu(app_menu);
-                win.on_menu_event(|w, event| match event.id.as_ref() {
-                    "menu-hide" => {
-                        let _ = w.hide();
-                        WINDOW_HIDDEN.store(true, Ordering::Relaxed);
-                        if let Some(wv) = w.app_handle().get_webview_window("main") {
-                            let _ = wv.eval("if(window.__rotationLockSetHidden) window.__rotationLockSetHidden(true);");
-                        }
-                    }
-                    "menu-quit" => quit_app(w.app_handle()),
-                    "menu-about" => {
-                        if let Some(wv) = w.app_handle().get_webview_window("main") {
-                            let _ = wv.eval("var o=document.getElementById('aboutOverlay'); if(o) o.dataset.open='true';");
-                        }
-                    }
-                    _ => {}
-                });
-            }
+            // File/Help live in the in-app header (dist/index.html) — no native menu bar.
 
             // Initialize window icon to match current state
             if let Some(win) = app.get_webview_window("main") {
@@ -407,11 +395,11 @@ fn main() {
                 reapply_lock_if_configured(&handle, &app_state, "startup");
             }
 
-            // If launched via --tray (autostart), hide main window and apply start-locked if configured.
+            // Window is created hidden (visible: false). Only show it for a deliberate
+            // launch; --tray (autostart/unlock re-trigger) stays in the tray.
             if started_from_tray {
+                WINDOW_HIDDEN.store(true, Ordering::Relaxed);
                 if let Some(win) = app.get_webview_window("main") {
-                    let _ = win.hide();
-                    WINDOW_HIDDEN.store(true, Ordering::Relaxed);
                     let _ = win.eval("if(window.__rotationLockSetHidden) window.__rotationLockSetHidden(true);");
                 }
                 let cfg = app_state.config.lock().unwrap().clone();
@@ -423,10 +411,42 @@ fn main() {
                         update_tray(&handle, true);
                     }
                 }
+            } else {
+                show_main_window(&handle);
             }
 
             start_resume_monitor(handle.clone(), app_state.clone());
-            install_resume_hook(handle, app_state);
+            install_resume_hook(handle.clone(), app_state.clone());
+
+            // Background auto-update: check GitHub shortly after launch; if a
+            // newer release exists, stage it and restart to apply.
+            {
+                let handle = handle.clone();
+                let app_state = app_state.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_secs(8));
+                    if !app_state.config.lock().unwrap().auto_update {
+                        return;
+                    }
+                    let update = match updater::check() {
+                        Ok(Some(u)) => u,
+                        Ok(None) => return,
+                        Err(e) => {
+                            eprintln!("update check failed: {e:#}");
+                            return;
+                        }
+                    };
+                    let _ = handle.emit("update-status", format!("Updating to {}…", update.version));
+                    match updater::download_and_stage(&update, started_from_tray) {
+                        Ok(()) => {
+                            // Exit WITHOUT unlocking: the relaunched build reapplies
+                            // the lock from config on startup.
+                            handle.exit(0);
+                        }
+                        Err(e) => eprintln!("update failed: {e:#}"),
+                    }
+                });
+            }
             Ok(())
         })
         .run(tauri::generate_context!())

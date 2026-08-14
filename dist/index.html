@@ -9,16 +9,30 @@
 </head>
 <body data-state="unlocked">
   <main class="app">
-    <button class="donate-btn" id="donateBtn" type="button" title="Support development on Ko-fi">
-      <span class="donate-heart" aria-hidden="true">♥</span>
-      <span>Donate</span>
-    </button>
-    <header class="hero">
-      <h1>Rotation Lock</h1>
-      <p class="sub">Force laptop mode. No more accidental tablet rotations.</p>
-    </header>
-
     <section class="lock-card">
+      <div class="topbar">
+      <nav class="menubar" aria-label="App menu">
+        <div class="menu" id="menuFile">
+          <button class="menu-btn" type="button" aria-haspopup="true" aria-expanded="false">File</button>
+          <div class="menu-drop" role="menu">
+            <button class="menu-item" id="menuHideBtn" type="button" role="menuitem">Minimize to tray <span class="menu-key">Ctrl+W</span></button>
+            <button class="menu-item" id="menuAutoUpdateBtn" type="button" role="menuitemcheckbox" aria-checked="true">Auto-update <span class="menu-check" aria-hidden="true">✓</span></button>
+            <div class="menu-sep" role="separator"></div>
+            <button class="menu-item" id="menuQuitBtn" type="button" role="menuitem">Quit <span class="menu-key">Ctrl+Q</span></button>
+          </div>
+        </div>
+        <div class="menu" id="menuHelp">
+          <button class="menu-btn" type="button" aria-haspopup="true" aria-expanded="false">Help</button>
+          <div class="menu-drop" role="menu">
+            <button class="menu-item" id="menuAboutBtn" type="button" role="menuitem">About Rotation Lock</button>
+          </div>
+        </div>
+      </nav>
+      <button class="donate-btn" id="donateBtn" type="button" title="Support development on Ko-fi">
+        <span class="donate-heart" aria-hidden="true">♥</span>
+        <span>Donate</span>
+      </button>
+      </div>
       <canvas class="sky" id="sky" aria-hidden="true"></canvas>
       <div class="lock-stage" id="lockStage">
         <!-- Twinkles behind the lock -->
@@ -82,7 +96,12 @@
     <section class="card sensor-card">
       <div class="sensor-head">
         <span class="field-label">Orientation sensor</span>
-        <button class="ghost" id="refreshBtn" type="button">Refresh</button>
+        <button class="refresh-btn" id="refreshBtn" type="button" title="Refresh sensors" aria-label="Refresh sensors">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <polyline points="21 3 21 9 15 9" />
+          </svg>
+        </button>
       </div>
       <div class="sensor-picker" id="sensorPicker">
         <button class="sensor-trigger" id="sensorTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">
@@ -97,14 +116,12 @@
       <label class="row">
         <span>
           <span class="row-title">Run Rotation Lock at login</span>
-          <span class="row-sub">App auto-launches silently when you sign in to Windows.</span>
         </span>
         <input type="checkbox" id="autostartChk" class="switch" />
       </label>
       <label class="row">
         <span>
           <span class="row-title">Auto-lock when app starts</span>
-          <span class="row-sub">Apply the rotation lock immediately, no clicking needed.</span>
         </span>
         <input type="checkbox" id="startLockedChk" class="switch" />
       </label>
@@ -116,6 +133,7 @@
         <span class="msg-icon" aria-hidden="true"></span>
         <span class="msg-text"></span>
       </span>
+      <span class="version" id="appVersion"></span>
     </footer>
   </main>
 

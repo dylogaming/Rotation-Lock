@@ -59,16 +59,82 @@ body[data-state="locked"] {
   overflow: hidden;
 }
 
-.hero { text-align: center; padding: 0; flex: 0 0 auto; position: relative; }
-.hero h1 { font-size: clamp(15px, 2.2vh, 20px); letter-spacing: .3px; margin: 0 0 2px; font-weight: 650; }
-.hero .sub { margin: 0; font-size: clamp(10px, 1.4vh, 12.5px); color: var(--text-dim); }
-
-/* ----- DONATE BUTTON (top-right) ----- */
-.donate-btn {
+/* ----- TOP BAR (File/Help left, Donate right, overlaid on lock card) ----- */
+.topbar {
   position: absolute;
-  top: clamp(4px, 0.8vh, 10px);
-  right: clamp(8px, 1.6vw, 14px);
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px clamp(8px, 1.6vw, 12px);
+  background: linear-gradient(180deg, rgba(9, 13, 24, .55), rgba(9, 13, 24, .25));
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(255, 255, 255, .07);
+  border-radius: 18px 18px 0 0;
+}
+.menubar {
+  display: flex;
+  gap: 2px;
+}
+.menu { position: relative; }
+.menu-btn {
+  padding: 3px 9px;
+  font-size: clamp(10.5px, 1.3vh, 12px);
+  font-weight: 600;
+  letter-spacing: .25px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.menu-btn:hover, .menu.open .menu-btn {
+  color: var(--text);
+  background: rgba(255, 255, 255, .07);
+  border-color: var(--border);
+}
+.menu-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.menu-drop {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 190px;
+  padding: 4px;
+  background: linear-gradient(180deg, #1a2136, #131a2c);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .5);
+  z-index: 40;
+}
+.menu.open .menu-drop { display: block; }
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+.menu-item:hover { background: rgba(255, 255, 255, .08); }
+.menu-key { color: var(--text-dim); font-size: 10.5px; letter-spacing: .3px; }
+.menu-sep { height: 1px; margin: 4px 6px; background: var(--border); }
+.menu-check { color: var(--gold); font-size: 11px; }
+.menu-item[aria-checked="false"] .menu-check { visibility: hidden; }
+
+/* ----- DONATE BUTTON (right side of top bar) ----- */
+.donate-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -109,7 +175,8 @@ body[data-state="locked"] {
 .lock-card {
   position: relative;
   border-radius: 18px;
-  padding: clamp(10px, 1.6vh, 22px) clamp(12px, 2vw, 18px) clamp(10px, 1.4vh, 18px);
+  /* Extra top padding clears the overlaid .topbar */
+  padding: clamp(38px, 6vh, 48px) clamp(12px, 2vw, 18px) clamp(10px, 1.4vh, 18px);
   box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
@@ -403,6 +470,27 @@ body[data-state="unlocking"] .lock-card .big-toggle {
 }
 .ghost:hover { color: var(--text); border-color: var(--accent); }
 
+/* Icon-only refresh (circular arrow), spins when clicked */
+.refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.refresh-btn:hover { color: var(--text); }
+.refresh-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.refresh-btn svg { display: block; }
+.refresh-btn.spinning svg { animation: refresh-spin .6s ease-in-out; }
+@keyframes refresh-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 .sensor-head {
   display: flex;
   align-items: center;
@@ -454,7 +542,7 @@ body[data-state="unlocking"] .lock-card .big-toggle {
   white-space: nowrap;
 }
 .sensor-menu::-webkit-scrollbar {
-  height: 6px;
+  width: 6px;
 }
 .sensor-menu::-webkit-scrollbar-thumb {
   background: rgba(154,163,178,.55);
@@ -468,16 +556,22 @@ body[data-state="unlocking"] .lock-card .big-toggle {
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(100% + 6px);
+  top: 100%;
   z-index: 30;
   display: none;
   max-height: 132px;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
   background: #0d111c;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-top: 0;
+  border-radius: 0 0 10px 10px;
   box-shadow: 0 14px 32px rgba(0,0,0,.55);
+}
+/* Trigger's bottom corners flatten so the menu reads as an extension of the row */
+.sensor-picker[data-open="true"] .sensor-trigger {
+  border-radius: 10px 10px 0 0;
 }
 .sensor-picker[data-open="true"] .sensor-menu {
   display: block;
@@ -488,10 +582,9 @@ body[data-state="unlocking"] .lock-card .big-toggle {
   to { opacity: 1; transform: translateY(0); }
 }
 .sensor-row {
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
   display: grid;
-  grid-template-columns: 34px minmax(max-content, 1fr);
+  grid-template-columns: 34px minmax(0, 1fr);
   align-items: center;
 }
 .sensor-list-star {
@@ -513,8 +606,8 @@ body[data-state="unlocking"] .lock-card .big-toggle {
   color: var(--gold);
 }
 .sensor-option {
-  width: max-content;
-  min-width: calc(100% - 34px);
+  width: 100%;
+  min-width: 0;
   height: 32px;
   display: flex;
   align-items: center;
@@ -531,7 +624,11 @@ body[data-state="unlocking"] .lock-card .big-toggle {
   background: rgba(91,140,255,.18);
 }
 .sensor-option-text {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: clamp(4px, 0.8vh, 8px) 0; }
 .row + .row { border-top: 1px solid var(--border); }
@@ -561,6 +658,12 @@ body[data-state="locked"] .switch:checked { background: var(--gold); border-colo
   margin-top: -2px;
 }
 .tag { border: 1px solid var(--border); padding: 2px 8px; border-radius: 999px; }
+.version {
+  flex: 0 0 auto;
+  color: var(--text-dim);
+  opacity: .6;
+  letter-spacing: .1px;
+}
 .copyright {
   min-width: 0;
   color: var(--text-dim);
