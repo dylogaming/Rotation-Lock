@@ -51,7 +51,7 @@ body[data-state="locked"] {
   height: 100vh;
   max-width: 480px;
   margin: 0 auto;
-  padding: clamp(8px, 1.4vh, 18px) clamp(10px, 2vw, 18px) clamp(8px, 1.4vh, 20px);
+  padding: 2px clamp(10px, 2vw, 18px) clamp(4px, 0.7vh, 8px);
   display: flex;
   flex-direction: column;
   gap: clamp(5px, 0.9vh, 14px);
@@ -59,64 +59,173 @@ body[data-state="locked"] {
   overflow: hidden;
 }
 
-.hero { text-align: center; padding: 0; flex: 0 0 auto; position: relative; }
-.hero h1 { font-size: clamp(15px, 2.2vh, 20px); letter-spacing: .3px; margin: 0 0 2px; font-weight: 650; }
-.hero .sub { margin: 0; font-size: clamp(10px, 1.4vh, 12.5px); color: var(--text-dim); }
-
-/* ----- DONATE BUTTON (top-right) ----- */
-.donate-btn {
+/* ----- TOP-RIGHT CONTROLS (bell, gear, donate overlaid on lock card) ----- */
+.topbar {
   position: absolute;
-  top: clamp(4px, 0.8vh, 10px);
-  right: clamp(8px, 1.6vw, 14px);
+  top: 2px;
+  right: 4px;
   z-index: 30;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 11px;
+  gap: 6px;
+}
+/* Bell button has ~5px of internal padding around its glyph; subtract it so
+   the visible bell sits the same distance from the edge as the Donate pill */
+.topbar.topbar-left { left: 1px; right: auto; }
+.menu { position: relative; }
+.menu-btn {
+  padding: 3px 9px;
   font-size: clamp(10.5px, 1.3vh, 12px);
   font-weight: 600;
   letter-spacing: .25px;
-  color: #ffe9a0;
-  background: linear-gradient(180deg, rgba(242, 180, 60, .22), rgba(207, 154, 52, .14));
-  border: 1px solid rgba(242, 204, 82, .45);
-  border-radius: 999px;
-  box-shadow:
-    0 4px 12px rgba(242, 180, 60, .18),
-    inset 0 1px 0 rgba(255, 255, 255, .10);
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
   cursor: pointer;
-  transition: filter .15s ease, transform .06s ease, box-shadow .2s ease, border-color .2s ease;
 }
-.donate-btn:hover {
-  filter: brightness(1.15);
-  border-color: rgba(242, 204, 82, .75);
-  box-shadow:
-    0 6px 16px rgba(242, 180, 60, .28),
-    inset 0 1px 0 rgba(255, 255, 255, .14);
+.menu-btn:hover, .menu.open .menu-btn {
+  color: var(--text);
+  background: rgba(255, 255, 255, .07);
+  border-color: var(--border);
 }
-.donate-btn:active { transform: translateY(1px); }
-.donate-btn:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: 2px;
+.menu-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.menu-drop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 190px;
+  padding: 4px;
+  background: linear-gradient(180deg, #1a2136, #131a2c);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .5);
+  z-index: 40;
+  /* Quick animated open/close */
+  opacity: 0;
+  transform: translateY(-4px) scale(.97);
+  transform-origin: top left;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity .12s ease, transform .12s ease, visibility 0s linear .12s;
+}
+.menu-drop.drop-right { transform-origin: top right; }
+.menu.open .menu-drop {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity .12s ease, transform .12s ease, visibility 0s;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+.menu-item:hover { background: rgba(255, 255, 255, .08); }
+.menu-key { color: var(--text-dim); font-size: 10.5px; letter-spacing: .3px; }
+.menu-sep { height: 1px; margin: 4px 6px; background: var(--border); }
+.menu-check { color: var(--gold); font-size: 11px; }
+.menu-item[aria-checked="false"] .menu-check { visibility: hidden; }
+.menu-drop.drop-right { left: auto; right: 0; }
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+}
+/* Day sky (locked): dark icons for contrast against the bright backdrop */
+body[data-state="locked"] .topbar .icon-btn,
+body[data-state="locking"] .topbar .icon-btn {
+  color: #1c2740;
+}
+body[data-state="locked"] .topbar .icon-btn:hover,
+body[data-state="locking"] .topbar .icon-btn:hover {
+  color: #0a0e18;
+}
+.icon-btn svg { display: block; }
+
+/* Bell: gold glow + dot when there's unseen update news */
+.bell-btn { position: relative; }
+.bell-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 6px 1px rgba(242, 204, 82, .8);
+  opacity: 0;
+  transform: scale(.4);
+  transition: opacity .2s, transform .2s;
+}
+.bell-btn[data-alert="true"] { color: var(--gold); }
+.bell-btn[data-alert="true"] .bell-dot { opacity: 1; transform: scale(1); animation: bell-pulse 2s ease-in-out infinite; }
+@keyframes bell-pulse {
+  0%, 100% { box-shadow: 0 0 4px 0 rgba(242, 204, 82, .6); }
+  50%      { box-shadow: 0 0 9px 3px rgba(242, 204, 82, .85); }
+}
+
+.bell-pop { min-width: 190px; max-width: 230px; padding: 7px 9px; }
+.bell-title { font-size: 11px; font-weight: 650; color: var(--text); margin-bottom: 3px; }
+.bell-notes { margin: 0; padding-left: 14px; }
+.bell-notes:empty { display: none; }
+.bell-notes li { font-size: 10px; color: var(--text-dim); margin: 2px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ----- DONATE BUTTON (right side of top bar) ----- */
+/* Donate menu row: pink gradient, lightens on hover, heart beats */
+#menuDonateBtn {
+  background: linear-gradient(90deg, rgba(255, 92, 141, .28), rgba(255, 138, 171, .16));
+  color: #ffd3e0;
+}
+#menuDonateBtn:hover {
+  background: linear-gradient(90deg, rgba(255, 92, 141, .42), rgba(255, 138, 171, .28));
+  color: #ffe4ec;
+}
+#menuDonateBtn:hover .donate-heart {
+  animation: heartBeat .7s ease-in-out infinite;
+}
+@keyframes heartBeat {
+  0%, 100% { transform: scale(1); }
+  25%      { transform: scale(1.35); }
+  45%      { transform: scale(1); }
+  60%      { transform: scale(1.2); }
 }
 .donate-heart {
+  display: inline-block;
   color: #ff7f8a;
   font-size: 1.05em;
   line-height: 1;
-  transform: translateY(-0.5px);
 }
 
 /* ----- LOCK CARD ----- */
 .lock-card {
   position: relative;
-  border-radius: 18px;
+  border-radius: 0;
   padding: clamp(10px, 1.6vh, 22px) clamp(12px, 2vw, 18px) clamp(10px, 1.4vh, 18px);
   box-shadow: var(--shadow-card);
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: clamp(6px, 1vh, 14px);
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: none;
   flex: 1 1 auto;
   min-height: 0;
   isolation: isolate;
@@ -146,11 +255,11 @@ body[data-state="locking"] .lock-card {
 .lock-stage {
   position: relative;
   width: 100%;
-  max-width: clamp(140px, 30vh, 280px);
-  /* Fill all remaining card height; the SVG inside preserves aspect ratio.
-     min-height: 0 lets flex shrink the lock when the window is too short
-     to fit lock + button + sibling cards. */
-  flex: 1 1 0;
+  max-width: clamp(150px, 38vh, 320px);
+  /* Size the stage to the lock drawing itself (no letterbox): height follows
+     the SVG viewBox aspect. min-height 0 still lets it shrink under squeeze. */
+  flex: 0 1 auto;
+  aspect-ratio: 104 / 157;
   min-height: 0;
   perspective: 900px;
   perspective-origin: 50% 55%;
@@ -261,11 +370,42 @@ body[data-state="unlocked"] .shackle,
 body[data-state="unlocking"] .shackle {
   transform: translateY(-8px) translateX(3px) rotate(-16deg);
 }
-/* Gold outline/glow around the METAL shackle when locked */
+/* Clasp jiggle on rapid taps mid-transition. Two variants because the
+   shackle's resting transform differs between open and closed poses. */
+.shackle.jiggle-closed { animation: claspJiggleClosed .38s ease-in-out; }
+.shackle.jiggle-open   { animation: claspJiggleOpen .38s ease-in-out; }
+@keyframes claspJiggleClosed {
+  0%   { transform: rotate(0deg); }
+  25%  { transform: rotate(-5deg); }
+  55%  { transform: rotate(3.5deg); }
+  80%  { transform: rotate(-1.8deg); }
+  100% { transform: rotate(0deg); }
+}
+@keyframes claspJiggleOpen {
+  0%   { transform: translateY(-8px) translateX(3px) rotate(-16deg); }
+  25%  { transform: translateY(-8px) translateX(3px) rotate(-22deg); }
+  55%  { transform: translateY(-8px) translateX(3px) rotate(-11.5deg); }
+  80%  { transform: translateY(-8px) translateX(3px) rotate(-17.8deg); }
+  100% { transform: translateY(-8px) translateX(3px) rotate(-16deg); }
+}
+
+/* Subtle grey aura around the whole lock when unlocked */
+body[data-state="unlocked"] .lock-svg {
+  filter:
+    drop-shadow(0 0 5px rgba(180, 188, 205, .22))
+    drop-shadow(0 0 14px rgba(180, 188, 205, .10));
+}
+
+/* Locked: white glow on the clasp, gold glow on the gold body */
 body[data-state="locked"] .shackle {
   filter:
-    drop-shadow(0 0 3px rgba(242,204,82,.9))
-    drop-shadow(0 0 9px rgba(242,204,82,.6));
+    drop-shadow(0 0 3px rgba(255,255,255,.85))
+    drop-shadow(0 0 9px rgba(255,255,255,.45));
+}
+body[data-state="locked"] .layer-gold {
+  filter:
+    drop-shadow(0 0 4px rgba(242,204,82,.8))
+    drop-shadow(0 0 12px rgba(242,204,82,.5));
 }
 
 /* Lock sequence */
@@ -300,8 +440,14 @@ body[data-state="unlocking"] .lock-group {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 0;
   padding: clamp(8px, 1.3vh, 12px) clamp(8px, 2vw, 18px);
-  width: 100%;
-  max-width: 320px;
+  /* Match the old two-line height now that the description is a tooltip */
+  min-height: clamp(52px, 7.2vh, 64px);
+  /* Tuck the button right under the lock: pull it up over the stage's
+     empty bottom space, and keep it clear of the sensor row below */
+  margin-top: clamp(4px, 1vh, 10px);
+  margin-bottom: 0;
+  width: 55%;
+  max-width: 190px;
   min-width: 0;
   flex: 0 0 auto;
   border-radius: 14px;
@@ -334,14 +480,16 @@ body[data-state="unlocking"] .lock-group {
   transform: translateX(-120%);
   pointer-events: none;
 }
-.big-toggle:disabled::after {
+.big-toggle:disabled::after,
+.big-toggle[data-busy="true"]::after {
   opacity: .65;
   animation: buttonSheen 1.25s ease-in-out infinite;
 }
 @keyframes buttonSheen {
   to { transform: translateX(120%); }
 }
-.big-toggle:disabled {
+.big-toggle:disabled,
+.big-toggle[data-busy="true"] {
   opacity: .82;
   filter: saturate(.85) brightness(.95);
 }
@@ -403,6 +551,27 @@ body[data-state="unlocking"] .lock-card .big-toggle {
 }
 .ghost:hover { color: var(--text); border-color: var(--accent); }
 
+/* Icon-only refresh (circular arrow), spins when clicked */
+.refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  background: transparent;
+  border: 0;
+  border-radius: 50%;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.refresh-btn:hover { color: var(--text); }
+.refresh-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
+.refresh-btn svg { display: block; }
+.refresh-btn.spinning svg { animation: refresh-spin .6s ease-in-out; }
+@keyframes refresh-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 .sensor-head {
   display: flex;
   align-items: center;
@@ -414,11 +583,11 @@ body[data-state="unlocking"] .lock-card .big-toggle {
 
 /* ----- CARDS / SETTINGS ----- */
 .card {
-  background: linear-gradient(180deg, var(--card), var(--card-2));
-  border: 1px solid var(--border);
+  background: transparent;
+  border: none;
   border-radius: var(--radius);
-  padding: clamp(9px, 1.4vh, 16px);
-  box-shadow: var(--shadow-card);
+  padding: clamp(2px, 0.5vh, 6px) clamp(9px, 1.4vh, 16px);
+  box-shadow: none;
   flex: 0 0 auto;
 }
 .field { display: block; }
@@ -426,25 +595,43 @@ body[data-state="unlocking"] .lock-card .big-toggle {
 .native-select {
   display: none;
 }
+.sensor-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.sensor-label { margin: 0; flex: 0 0 auto; }
+/* .row.sensor-line beats .row's space-between so the three pieces cluster */
+.row.sensor-line { justify-content: center; gap: 6px; }
 .sensor-picker {
   position: relative;
-  width: 100%;
+  flex: 0 1 auto;
+  max-width: calc(100% - 40px);
+  min-width: 0;
 }
 .sensor-trigger {
-  background: var(--card-2);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: transparent;
+  color: var(--text-dim);
+  border: none;
+  border-radius: 8px;
   min-width: 0;
-  height: 40px;
+  height: 32px;
   width: 100%;
   appearance: none;
-  text-align: left;
-  padding: 0 34px 0 12px;
+  text-align: center;
+  padding: 0 26px 0 8px;
   font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: color .15s, background-color .15s;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239aa3b2' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
   background-repeat: no-repeat;
-  background-position: right 12px center;
+  background-position: right 7px center;
+}
+.sensor-trigger:hover {
+  color: var(--text);
+  background-color: rgba(255, 255, 255, .05);
 }
 .sensor-trigger-text {
   display: block;
@@ -454,84 +641,75 @@ body[data-state="unlocking"] .lock-card .big-toggle {
   white-space: nowrap;
 }
 .sensor-menu::-webkit-scrollbar {
-  height: 6px;
+  width: 6px;
 }
 .sensor-menu::-webkit-scrollbar-thumb {
   background: rgba(154,163,178,.55);
   border-radius: 999px;
 }
-.sensor-trigger:focus {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+.sensor-trigger:focus,
+.sensor-trigger:focus-visible {
+  outline: none;
 }
+/* Floating panel styled to match the gear/bell dropdowns */
 .sensor-menu {
   position: absolute;
   left: 0;
   right: 0;
-  top: calc(100% + 6px);
+  /* Prefers opening downward; JS flips it up when there's no room below */
+  top: calc(100% + 4px);
+  bottom: auto;
   z-index: 30;
   display: none;
-  max-height: 132px;
-  overflow: auto;
+  max-height: 148px;
+  overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
-  background: #0d111c;
+  padding: 4px;
+  background: linear-gradient(180deg, #1a2136, #131a2c);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 14px 32px rgba(0,0,0,.55);
+  box-shadow: 0 -10px 28px rgba(0, 0, 0, .5);
 }
 .sensor-picker[data-open="true"] .sensor-menu {
   display: block;
   animation: sensorMenuIn .14s ease-out;
 }
+.sensor-menu[data-dir="up"] {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
 @keyframes sensorMenuIn {
-  from { opacity: 0; transform: translateY(-4px); }
+  from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.sensor-row {
-  width: max-content;
-  min-width: 100%;
-  display: grid;
-  grid-template-columns: 34px minmax(max-content, 1fr);
-  align-items: center;
-}
-.sensor-list-star {
-  height: 32px;
-  width: 34px;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--text-dim);
-  font-size: 16px;
-  line-height: 1;
-}
-.sensor-list-star[data-active="true"] {
-  color: var(--gold);
-}
-.sensor-list-star:hover {
-  background: rgba(242,204,82,.12);
-  color: var(--gold);
-}
 .sensor-option {
-  width: max-content;
-  min-width: calc(100% - 34px);
-  height: 32px;
+  width: 100%;
+  min-width: 0;
+  height: 28px;
   display: flex;
   align-items: center;
-  padding: 0 12px;
+  padding: 0 8px;
   border: 0;
-  border-radius: 0;
+  border-radius: 7px;
   background: transparent;
-  color: var(--text);
+  color: #b9c1cf;
+  font-size: 11.5px;
+  font-weight: 400;
   text-align: left;
   white-space: nowrap;
+  cursor: pointer;
 }
 .sensor-option:hover,
 .sensor-option[data-selected="true"] {
-  background: rgba(91,140,255,.18);
+  background: rgba(255, 255, 255, .08);
 }
 .sensor-option-text {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: clamp(4px, 0.8vh, 8px) 0; }
 .row + .row { border-top: 1px solid var(--border); }
@@ -561,6 +739,25 @@ body[data-state="locked"] .switch:checked { background: var(--gold); border-colo
   margin-top: -2px;
 }
 .tag { border: 1px solid var(--border); padding: 2px 8px; border-radius: 999px; }
+/* Version tag: quiet, pinned bottom-right of the lock background */
+.version {
+  position: absolute;
+  right: 7px;
+  bottom: 4px;
+  z-index: 30;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: .4px;
+  color: var(--text-dim);
+  opacity: .55;
+  user-select: none;
+  pointer-events: none;
+}
+body[data-state="locked"] .version,
+body[data-state="locking"] .version {
+  color: #1c2740;
+  opacity: .6;
+}
 .copyright {
   min-width: 0;
   color: var(--text-dim);
@@ -570,22 +767,29 @@ body[data-state="locked"] .switch:checked { background: var(--gold); border-colo
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* Floating toast pinned to the bottom of the lock area (no reserved row) */
 .msg {
-  flex: 0 0 auto;
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  z-index: 30;
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  max-width: 42%;
-  min-height: 18px;
+  max-width: 86%;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(9, 13, 24, .78);
+  font-size: 11px;
   color: var(--text-dim);
   opacity: 0;
-  transform: translateX(8px);
+  transform: translate(-50%, 6px);
   pointer-events: none;
   transition: opacity .22s ease, transform .22s ease;
 }
 .msg[data-visible="true"] {
   opacity: .95;
-  transform: translateX(0);
+  transform: translate(-50%, 0);
 }
 .msg[data-kind="error"] { color: var(--red); }
 .msg[data-kind="success"] { color: var(--green); }
@@ -650,15 +854,40 @@ body[data-state="locked"] .switch:checked { background: var(--gold); border-colo
 .about-card h2 { margin: 6px 0 2px; font-size: 18px; font-weight: 650; }
 .about-version { margin: 0; font-size: 12px; color: var(--text-dim); }
 .about-desc { margin: 14px 0 12px; font-size: 12.5px; color: var(--text); line-height: 1.4; }
-.about-copy { margin: 0 0 16px; font-size: 11px; color: var(--text-dim); line-height: 1.4; }
-.about-logo {
-  width: 56px; height: 56px; margin: 0 auto;
-  border-radius: 14px;
-  background: conic-gradient(from 140deg, #5b8cff, #37c76a, #f0b84d, #5b8cff);
-  box-shadow: 0 8px 20px rgba(0,0,0,.5), inset 0 0 0 3px rgba(255,255,255,.08);
-  position: relative;
+.about-copy { margin: 12px 0 0; font-size: 11px; color: var(--text-dim); line-height: 1.4; text-align: center; }
+
+/* Night/day split hero: open silver lock on the night side, locked gold on the day side */
+.about-hero {
+  display: flex;
+  height: 74px;
+  margin: 0 auto 6px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
 }
-.about-logo::after { content: ""; position: absolute; inset: 8px; border-radius: 9px; background: var(--bg-2); }
+.about-half {
+  position: relative;
+  flex: 1 1 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.about-night { background: linear-gradient(180deg, #0b1322, #070d1a); }
+.about-day   { background: linear-gradient(180deg, #6db7ea, #a8d7f4); }
+.about-shine {
+  position: absolute;
+  width: 58px; height: 58px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,.38) 0%, rgba(255,255,255,.12) 45%, transparent 70%);
+}
+.about-day .about-shine {
+  background: radial-gradient(circle, rgba(255,246,200,.6) 0%, rgba(255,236,160,.2) 45%, transparent 70%);
+}
+.mouse-shine { transition: opacity .25s ease; pointer-events: none; }
+
+.about-lock { position: relative; display: block; }
+.about-lock-open   { transform: rotate(-15deg); }
+.about-lock-locked { transform: rotate(8deg); }
 .about-card .primary { width: 100%; }
 
 /* ----- CLOSE PROMPT MODAL ----- */

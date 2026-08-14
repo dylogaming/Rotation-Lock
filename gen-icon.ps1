@@ -1,7 +1,7 @@
 # Copyright (c) 2026 DYLO Gaming LLC. All rights reserved.
 Add-Type -AssemblyName System.Drawing
 
-# Draws a padlock (open or closed) in silver or gold, with a small green/red status dot overlay.
+# Draws a padlock (open or closed): gold when locked, grey/silver when unlocked. No status dot.
 function New-LockBitmap([int]$size, [string]$state) {
     $bmp = New-Object System.Drawing.Bitmap $size, $size, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $g = [System.Drawing.Graphics]::FromImage($bmp)
@@ -42,8 +42,8 @@ function New-LockBitmap([int]$size, [string]$state) {
     # Body + shackle color gradient
     if ($state -eq 'locked') {
         $fillColors = @(
-            [System.Drawing.Color]::FromArgb(255, 196, 146, 56),   # deep gold
-            [System.Drawing.Color]::FromArgb(255, 253, 231, 122)   # bright gold
+            [System.Drawing.Color]::FromArgb(255, 207, 154, 52),   # deep gold (#cf9a34, matches app)
+            [System.Drawing.Color]::FromArgb(255, 255, 216, 106)   # bright gold (#ffd86a, matches app)
         )
     } else {
         $fillColors = @(
@@ -110,22 +110,6 @@ function New-LockBitmap([int]$size, [string]$state) {
     $slotW = $khR * 0.7
     $slotH = $bodyH * 0.30
     $g.FillRectangle($dark, ($cx - $slotW/2), ($khY + $khR*0.6), $slotW, $slotH)
-
-    # State dot overlay (bottom-right)
-    $dotSize = $size * 0.42
-    $dotX = $size - $dotSize - ($size * 0.04)
-    $dotY = $size - $dotSize - ($size * 0.04)
-    $dotColor = if ($state -eq 'locked') {
-        [System.Drawing.Color]::FromArgb(255, 235, 60, 60)
-    } else {
-        [System.Drawing.Color]::FromArgb(255, 50, 205, 90)
-    }
-    $ringPad = $size * 0.035
-    $g.FillEllipse(
-        (New-Object System.Drawing.SolidBrush ([System.Drawing.Color]::FromArgb(255, 250, 252, 255))),
-        ($dotX - $ringPad), ($dotY - $ringPad),
-        ($dotSize + $ringPad*2), ($dotSize + $ringPad*2))
-    $g.FillEllipse((New-Object System.Drawing.SolidBrush $dotColor), $dotX, $dotY, $dotSize, $dotSize)
 
     $g.Dispose(); $bg.Dispose(); $bgPath.Dispose(); $metal.Dispose(); $stroke.Dispose()
     $hiBrush.Dispose(); $hiPath.Dispose(); $dark.Dispose(); $bodyPath.Dispose()

@@ -9,16 +9,39 @@
 </head>
 <body data-state="unlocked">
   <main class="app">
-    <button class="donate-btn" id="donateBtn" type="button" title="Support development on Ko-fi">
-      <span class="donate-heart" aria-hidden="true">♥</span>
-      <span>Donate</span>
-    </button>
-    <header class="hero">
-      <h1>Rotation Lock</h1>
-      <p class="sub">Force laptop mode. No more accidental tablet rotations.</p>
-    </header>
-
     <section class="lock-card">
+      <div class="topbar topbar-left">
+        <div class="menu bell-menu" id="bellMenu">
+          <button class="icon-btn menu-btn bell-btn" id="bellBtn" type="button" title="Update news" aria-haspopup="true" aria-expanded="false" data-alert="false">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+              <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5S10.5 3.17 10.5 4v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
+            </svg>
+            <span class="bell-dot" aria-hidden="true"></span>
+          </button>
+          <div class="menu-drop bell-pop" role="menu">
+            <div class="bell-title" id="bellTitle">No update news</div>
+            <ul class="bell-notes" id="bellNotes"></ul>
+          </div>
+        </div>
+      </div>
+      <span class="version" id="appVersion"></span>
+      <div class="topbar">
+        <div class="menu" id="menuGear">
+          <button class="icon-btn menu-btn" type="button" title="Settings" aria-haspopup="true" aria-expanded="false">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+              <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.488.488 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 0 0-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" />
+            </svg>
+          </button>
+          <div class="menu-drop drop-right" role="menu">
+            <button class="menu-item" id="menuRunLoginBtn" type="button" role="menuitemcheckbox" aria-checked="false" title="App auto-launches silently in the tray when you sign in to Windows.">Run at login <span class="menu-check" aria-hidden="true">✓</span></button>
+            <button class="menu-item" id="menuAutoUpdateBtn" type="button" role="menuitemcheckbox" aria-checked="true">Auto-update <span class="menu-check" aria-hidden="true">✓</span></button>
+            <button class="menu-item" id="menuDonateBtn" type="button" role="menuitem" title="Support development on Ko-fi">Donate <span class="donate-heart" aria-hidden="true">♥</span></button>
+            <button class="menu-item" id="menuAboutBtn" type="button" role="menuitem">About Rotation Lock</button>
+            <div class="menu-sep" role="separator"></div>
+            <button class="menu-item" id="menuQuitBtn" type="button" role="menuitem">Quit <span class="menu-key">Ctrl+Q</span></button>
+          </div>
+        </div>
+      </div>
       <canvas class="sky" id="sky" aria-hidden="true"></canvas>
       <div class="lock-stage" id="lockStage">
         <!-- Twinkles behind the lock -->
@@ -28,7 +51,7 @@
         <!-- Star burst layer (impact) -->
         <div class="stars" id="stars"></div>
 
-        <svg class="lock-svg" viewBox="0 0 120 160" aria-hidden="true">
+        <svg class="lock-svg" viewBox="8 -2 104 157" aria-hidden="true">
           <defs>
             <linearGradient id="gradSilver" x1="0" y1="1" x2="0" y2="0">
               <stop offset="0%"  stop-color="#4e5364"/>
@@ -44,6 +67,21 @@
             <clipPath id="fillClip">
               <path id="fillPath" d="M 0 160 L 120 160 L 120 160 L 0 160 Z"/>
             </clipPath>
+            <radialGradient id="mouseShineGrad">
+              <stop offset="0%"  stop-color="rgba(255,255,255,0.55)"/>
+              <stop offset="45%" stop-color="rgba(255,255,255,0.18)"/>
+              <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
+            </radialGradient>
+            <filter id="mouseShineBlur" x="-60%" y="-60%" width="220%" height="220%">
+              <feGaussianBlur stdDeviation="5"/>
+            </filter>
+            <!-- Mask limiting the cursor reflection to the metal: clasp stroke + body -->
+            <mask id="lockMetalMask">
+              <path d="M 36 78 L 36 46 A 24 24 0 0 1 84 46 L 84 78"
+                    fill="none" stroke="#fff" stroke-width="11"
+                    stroke-linecap="round" stroke-linejoin="round"/>
+              <rect x="22" y="70" width="76" height="78" rx="12" fill="#fff"/>
+            </mask>
           </defs>
 
           <g class="lock-group" id="lockGroup">
@@ -66,6 +104,12 @@
               <circle class="keyhole-hole" cx="60" cy="98" r="6" fill="#2a1e07"/>
               <rect    class="keyhole-slot" x="57" y="98" width="6" height="22" rx="2" fill="#2a1e07"/>
             </g>
+
+            <!-- Cursor reflection: blurred light spot masked to the metal -->
+            <g mask="url(#lockMetalMask)">
+              <ellipse class="mouse-shine" id="mouseShine" cx="-40" cy="-40" rx="20" ry="26"
+                       fill="url(#mouseShineGrad)" filter="url(#mouseShineBlur)" opacity="0"/>
+            </g>
           </g>
         </svg>
 
@@ -73,80 +117,66 @@
         <canvas class="twinkles twinkles-front" id="twinklesFront"></canvas>
       </div>
 
-      <button class="primary big-toggle" id="toggleBtn" type="button">
+      <button class="primary big-toggle" id="toggleBtn" type="button" title="Tap to lock rotation">
         <span class="toggle-status" id="toggleStatus">Unlocked</span>
-        <span class="toggle-action" id="toggleAction">Tap to lock rotation</span>
       </button>
-    </section>
-
-    <section class="card sensor-card">
-      <div class="sensor-head">
-        <span class="field-label">Orientation sensor</span>
-        <button class="ghost" id="refreshBtn" type="button">Refresh</button>
-      </div>
-      <div class="sensor-picker" id="sensorPicker">
-        <button class="sensor-trigger" id="sensorTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">
-          <span class="sensor-trigger-text" id="sensorTriggerText"></span>
-        </button>
-        <div class="sensor-menu" id="sensorMenu" role="listbox"></div>
-      </div>
-      <select id="sensorSelect" class="native-select" aria-hidden="true" tabindex="-1"></select>
-    </section>
-
-    <section class="card">
-      <label class="row">
-        <span>
-          <span class="row-title">Run Rotation Lock at login</span>
-          <span class="row-sub">App auto-launches silently when you sign in to Windows.</span>
-        </span>
-        <input type="checkbox" id="autostartChk" class="switch" />
-      </label>
-      <label class="row">
-        <span>
-          <span class="row-title">Auto-lock when app starts</span>
-          <span class="row-sub">Apply the rotation lock immediately, no clicking needed.</span>
-        </span>
-        <input type="checkbox" id="startLockedChk" class="switch" />
-      </label>
-    </section>
-
-    <footer class="footer">
-      <span class="copyright">&copy; 2026 DYLO Gaming LLC. All rights reserved.</span>
+      <!-- Floating toast (errors / brief notices); no reserved row -->
       <span class="msg" id="msg" aria-live="polite">
         <span class="msg-icon" aria-hidden="true"></span>
         <span class="msg-text"></span>
       </span>
-    </footer>
+    </section>
+
+    <section class="card">
+      <select id="sensorSelect" class="native-select" aria-hidden="true" tabindex="-1"></select>
+      <div class="row sensor-line" title="Orientation sensor the lock removes to force laptop mode.">
+        <div class="sensor-picker" id="sensorPicker">
+          <button class="sensor-trigger" id="sensorTrigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+            <span class="sensor-trigger-text" id="sensorTriggerText"></span>
+          </button>
+          <div class="sensor-menu" id="sensorMenu" role="listbox"></div>
+        </div>
+        <button class="refresh-btn" id="refreshBtn" type="button" title="Refresh sensors" aria-label="Refresh sensors">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <polyline points="21 3 21 9 15 9" />
+          </svg>
+        </button>
+      </div>
+    </section>
+
   </main>
 
   <div class="about-overlay" id="aboutOverlay">
     <div class="about-card">
-      <div class="about-logo" aria-hidden="true"></div>
+      <div class="about-hero" aria-hidden="true">
+        <div class="about-half about-night">
+          <span class="about-shine"></span>
+          <svg class="about-lock about-lock-open" viewBox="0 0 64 64" width="44" height="44">
+            <path d="M24 30v-9a9 9 0 0 1 18 0" fill="none" stroke="#b4bccd" stroke-width="6" stroke-linecap="round" transform="rotate(-14 24 30) translate(-2 -3)" />
+            <rect x="16" y="30" width="32" height="24" rx="6" fill="url(#gradSilver)" />
+            <circle cx="32" cy="40" r="3.4" fill="#161a2a" />
+            <rect x="30.4" y="42" width="3.2" height="6" rx="1.6" fill="#161a2a" />
+          </svg>
+        </div>
+        <div class="about-half about-day">
+          <span class="about-shine"></span>
+          <svg class="about-lock about-lock-locked" viewBox="0 0 64 64" width="44" height="44">
+            <path d="M23 30v-8a9 9 0 0 1 18 0v8" fill="none" stroke="#e7b84f" stroke-width="6" stroke-linecap="round" />
+            <rect x="16" y="30" width="32" height="24" rx="6" fill="url(#gradGold)" />
+            <circle cx="32" cy="40" r="3.4" fill="#4a3308" />
+            <rect x="30.4" y="42" width="3.2" height="6" rx="1.6" fill="#4a3308" />
+          </svg>
+        </div>
+      </div>
       <h2>Rotation Lock</h2>
-      <p class="about-version">Version 0.1.0</p>
-      <p class="about-desc">Force laptop mode on convertible Windows devices.<br/>Persists across sleep, wake, and reboot.</p>
-      <p class="about-copy">&copy; 2026 DYLO Gaming LLC. All rights reserved.</p>
+      <p class="about-version" id="aboutVersion">Version 0.1.3</p>
+      <p class="about-desc">Force laptop mode on convertible Windows devices.</p>
       <button class="primary" id="aboutClose" type="button">Close</button>
+      <p class="about-copy">&copy; 2026 DYLO Gaming LLC. All rights reserved.</p>
     </div>
   </div>
 
-  <div class="about-overlay close-overlay" id="closeOverlay">
-    <div class="about-card close-card">
-      <h2>Close Rotation Lock?</h2>
-      <p class="about-desc">Choose what to do with the app.</p>
-      <div class="close-actions">
-        <button class="primary" id="closeMinimizeBtn" type="button">
-          <span class="close-action-title">Minimize to tray</span>
-          <span class="close-action-sub">Keep running in the background</span>
-        </button>
-        <button class="primary close-quit" id="closeQuitBtn" type="button">
-          <span class="close-action-title">Quit completely</span>
-          <span class="close-action-sub">Close the window and tray icon</span>
-        </button>
-        <button class="ghost close-cancel" id="closeCancelBtn" type="button">Cancel</button>
-      </div>
-    </div>
-  </div>
 
   <script src="main.js"></script>
 </body>

@@ -13,13 +13,14 @@
         "title": "Rotation Lock",
         "width": 440,
         "height": 720,
-        "minWidth": 380,
-        "minHeight": 500,
+        "minWidth": 340,
+        "minHeight": 390,
         "resizable": true,
         "fullscreen": false,
         "decorations": true,
         "transparent": false,
-        "visible": true,
+        "visible": false,
+        "focus": false,
         "center": true
       }
     ],
