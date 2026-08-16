@@ -5,7 +5,7 @@
   <img src="images/locked.png" width="320" alt="Locked state" />
 </p>
 
-A simple desktop & tray application made for laptops that can turn into tablets upon rotation. Whenever I work on my laptop in bed, sometimes I'll lie down sideways, or it falls to the side, and it causes it to do a full rotation and go into tablet mode, which is extremely annoying and has no way to disable aside from disabling the sensor in Device Manager. This program solves that.
+A simple Windows desktop & tray application designed for laptops that can turn into tablets upon rotation. Sometimes, when I work on my laptop in bed, I'll lie down sideways, or it falls to the side. Either situation causes the device to do a full rotation and go into tablet mode. This is annoying and has no way to prevent aside from disabling the sensor in Device Manager. This program resolves that issue.
 
 ## Taskbar & Tray icon
 
